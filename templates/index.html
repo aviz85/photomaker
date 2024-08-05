@@ -85,7 +85,7 @@
                     }),
                 });
                 const data = await response.json();
-                if (data.image_url) {
+                if (data.image_urls) {
                     result.src = data.image_urls[0];
                     result.style.display = 'block';
                 } else {
