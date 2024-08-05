@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webcam Portrait Illustrator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .container {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        select, button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        #video, #canvas, #result {
+            width: 100%;
+            max-width: 640px;
+            margin-top: 20px;
+        }
+        #result {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Webcam Portrait Illustrator</h1>
+        <select id="promptSelect">
+            {% for prompt in prompts %}
+                <option value="{{ loop.index0 }}">{{ prompt }}</option>
+            {% endfor %}
+        </select>
+        <button id="captureBtn">Capture and Generate</button>
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas" style="display:none;"></canvas>
+        <img id="result" alt="Generated illustration">
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const result = document.getElementById('result');
+        const captureBtn = document.getElementById('captureBtn');
+        const promptSelect = document.getElementById('promptSelect');
+
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+        }
+
+        setupCamera();
+
+        captureBtn.addEventListener('click', async () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const imageData = canvas.toDataURL('image/jpeg');
+
+            try {
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        image: imageData,
+                        promptIndex: promptSelect.value
+                    }),
+                });
+                const data = await response.json();
+                if (data.image_url) {
+                    result.src = data.image_url;
+                    result.style.display = 'block';
+                } else {
+                    alert('Error generating image');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error generating image');
+            }
+        });
+    </script>
+</body>
+</html>
