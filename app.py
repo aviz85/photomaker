@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify
-import replicate
+import requests
 import os
 import base64
 import io
@@ -78,13 +78,6 @@ STYLES = [
     "Comic book", "Lowpoly", "Line art"
 ]
 
-
-STYLES = [
-    "(No style)", "Cinematic", "Disney Charactor", "Digital Art",
-    "Photographic (Default)", "Fantasy art", "Neonpunk", "Enhance",
-    "Comic book", "Lowpoly", "Line art"
-]
-
 @app.route('/')
 def index():
     return render_template('index.html', prompts=PROMPTS, styles=STYLES)
@@ -97,41 +90,53 @@ def generate():
     
     # Decode the base64 image
     image_data = base64.b64decode(image_data.split(',')[1])
-    image = io.BytesIO(image_data)
-    image.name = 'image.jpg'
-
+    
     try:
         # Prepare input for the API
-        input_data = {
-            "input_image": image,
-            "prompt": PROMPTS[prompt_index],
-            "style_name": STYLES[style_index],
-            "num_steps": 50,
-            "num_outputs": 1,
-            "guidance_scale": 5,
-            "negative_prompt": "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
-            "style_strength_ratio": 20,
-            "seed": random.randint(0, 2147483647),
-            "disable_safety_checker": False
+        headers = {
+            "Authorization": f"Token {REPLICATE_API_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "version": "ddfc2b08d209f9fa8c1eca692712918bd449f695dabb4a958da31802a9570fe4",
+            "input": {
+                "prompt": PROMPTS[prompt_index],
+                "style_name": STYLES[style_index],
+                "num_steps": 50,
+                "num_outputs": 1,
+                "guidance_scale": 5,
+                "negative_prompt": "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
+                "style_strength_ratio": 20,
+                "seed": random.randint(0, 2147483647),
+                "disable_safety_checker": False
+            }
         }
 
         # Create a prediction
-        prediction = replicate.predictions.create(
-            version="ddfc2b08d209f9fa8c1eca692712918bd449f695dabb4a958da31802a9570fe4",
-            input=input_data
-        )
+        response = requests.post("https://api.replicate.com/v1/predictions", json=payload, headers=headers)
+        response.raise_for_status()
+        prediction = response.json()
 
-        # Wait for the prediction to complete
-        while prediction.status != "succeeded" and prediction.status != "failed":
-            prediction.reload()
+        # Get the prediction ID
+        prediction_id = prediction['id']
+
+        # Poll for the result
+        while True:
+            response = requests.get(f"https://api.replicate.com/v1/predictions/{prediction_id}", headers=headers)
+            response.raise_for_status()
+            prediction = response.json()
+            
+            if prediction['status'] == 'succeeded':
+                return jsonify({"image_urls": prediction['output']})
+            elif prediction['status'] == 'failed':
+                return jsonify({"error": "Image generation failed"}), 400
+            
             time.sleep(1)
 
-        if prediction.status == "succeeded":
-            # The output is directly the list of image URLs
-            return jsonify({"image_urls": prediction.output})
-        else:
-            return jsonify({"error": "Prediction failed"}), 400
-
+    except requests.RequestException as e:
+        app.logger.error(f"API Error: {str(e)}")
+        return jsonify({"error": f"API Error: {str(e)}"}), 400
     except Exception as e:
         app.logger.error(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 400
