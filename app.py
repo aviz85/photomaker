@@ -6,8 +6,10 @@ import io
 
 app = Flask(__name__)
 
-# Set your Replicate API token here
-REPLICATE_API_TOKEN = "r8_aqAxXm1Xf3iE5QWMSQKRLxFz6ppj3MQ1726J2"
+# Get the Replicate API token from environment variable
+REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN")
+if not REPLICATE_API_TOKEN:
+    raise ValueError("No API token found. Please set the REPLICATE_API_TOKEN environment variable.")
 
 # List of predefined prompts
 PROMPTS = [
@@ -68,7 +70,6 @@ PROMPTS = [
     "A mystical druid img communing with nature"
 ]
 
-
 @app.route('/')
 def index():
     return render_template('index.html', prompts=PROMPTS)
@@ -82,9 +83,6 @@ def generate():
     image_data = base64.b64decode(image_data.split(',')[1])
     image = io.BytesIO(image_data)
     image.name = 'image.jpg'
-
-    # Set the API token
-    os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
 
     try:
         output = replicate.run(
