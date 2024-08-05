@@ -3,6 +3,8 @@ import replicate
 import os
 import base64
 import io
+import time
+import random
 
 app = Flask(__name__)
 
@@ -70,14 +72,21 @@ PROMPTS = [
     "A mystical druid img communing with nature"
 ]
 
+STYLES = [
+    "(No style)", "Cinematic", "Disney Charactor", "Digital Art",
+    "Photographic (Default)", "Fantasy art", "Neonpunk", "Enhance",
+    "Comic book", "Lowpoly", "Line art"
+]
+
 @app.route('/')
 def index():
-    return render_template('index.html', prompts=PROMPTS)
+    return render_template('index.html', prompts=PROMPTS, styles=STYLES)
 
 @app.route('/generate', methods=['POST'])
 def generate():
     image_data = request.json['image']
     prompt_index = int(request.json['promptIndex'])
+    style_index = int(request.json.get('styleIndex', 4))  # Default to "Photographic (Default)"
     
     # Decode the base64 image
     image_data = base64.b64decode(image_data.split(',')[1])
@@ -85,18 +94,39 @@ def generate():
     image.name = 'image.jpg'
 
     try:
-        output = replicate.run(
-            "tencentarc/photomaker:ddfc2b08d209f9fa8c1eca692712918bd449f695dabb4a958da31802a9570fe4",
-            input={
-                "prompt": PROMPTS[prompt_index],
-                "input_image": image,
-                "num_outputs": 1,
-                "style_name": "Photographic (Default)",
-                "num_steps": 50,
-            }
+        # Prepare input for the API
+        input_data = {
+            "input_image": image,
+            "prompt": PROMPTS[prompt_index],
+            "style_name": STYLES[style_index],
+            "num_steps": 50,
+            "num_outputs": 1,
+            "guidance_scale": 5,
+            "negative_prompt": "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
+            "style_strength_ratio": 20,
+            "seed": random.randint(0, 2147483647),
+            "disable_safety_checker": False
+        }
+
+        # Create a prediction
+        prediction = replicate.predictions.create(
+            version="ddfc2b08d209f9fa8c1eca692712918bd449f695dabb4a958da31802a9570fe4",
+            input=input_data
         )
-        return jsonify({"image_url": output[0]})
+
+        # Wait for the prediction to complete
+        while prediction.status != "succeeded" and prediction.status != "failed":
+            prediction.reload()
+            time.sleep(1)
+
+        if prediction.status == "succeeded":
+            # The output is an array of image URLs
+            return jsonify({"image_urls": prediction.output})
+        else:
+            return jsonify({"error": "Prediction failed"}), 400
+
     except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
         return jsonify({"error": str(e)}), 400
 
 if __name__ == '__main__':
