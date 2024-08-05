@@ -78,6 +78,13 @@ STYLES = [
     "Comic book", "Lowpoly", "Line art"
 ]
 
+
+STYLES = [
+    "(No style)", "Cinematic", "Disney Charactor", "Digital Art",
+    "Photographic (Default)", "Fantasy art", "Neonpunk", "Enhance",
+    "Comic book", "Lowpoly", "Line art"
+]
+
 @app.route('/')
 def index():
     return render_template('index.html', prompts=PROMPTS, styles=STYLES)
@@ -120,7 +127,7 @@ def generate():
             time.sleep(1)
 
         if prediction.status == "succeeded":
-            # The output is an array of image URLs
+            # The output is directly the list of image URLs
             return jsonify({"image_urls": prediction.output})
         else:
             return jsonify({"error": "Prediction failed"}), 400
